@@ -29,8 +29,12 @@ func TestUsageResponseParsing(t *testing.T) {
 		t.Errorf("Expected 46 requests, got %d", resp.GPT4.NumRequests)
 	}
 
-	if resp.GPT4.MaxRequestUsage != 500 {
-		t.Errorf("Expected limit 500, got %d", resp.GPT4.MaxRequestUsage)
+	if resp.GPT4.MaxRequestUsage == nil || *resp.GPT4.MaxRequestUsage != 500 {
+		val := 0
+		if resp.GPT4.MaxRequestUsage != nil {
+			val = *resp.GPT4.MaxRequestUsage
+		}
+		t.Errorf("Expected limit 500, got %d", val)
 	}
 
 	if resp.StartOfMonth != "2026-01-01T00:00:00.000Z" {
@@ -39,21 +43,29 @@ func TestUsageResponseParsing(t *testing.T) {
 }
 
 func TestUsageDataCalculation(t *testing.T) {
+	maxRequestUsage := 500
 	resp := UsageResponse{
 		GPT4: struct {
-			NumRequests    int `json:"numRequests"`
-			MaxRequestUsage int `json:"maxRequestUsage"`
-			NumTokens      int `json:"numTokens"`
+			NumRequests      int  `json:"numRequests"`
+			NumRequestsTotal int  `json:"numRequestsTotal"`
+			MaxRequestUsage  *int `json:"maxRequestUsage"`
+			MaxTokenUsage    *int `json:"maxTokenUsage"`
+			NumTokens        int  `json:"numTokens"`
 		}{
-			NumRequests:    375,
-			MaxRequestUsage: 500,
-			NumTokens:      125000,
+			NumRequests:      375,
+			NumRequestsTotal: 375,
+			MaxRequestUsage:  &maxRequestUsage,
+			MaxTokenUsage:    nil,
+			NumTokens:        125000,
 		},
 		StartOfMonth: "2026-01-01T00:00:00.000Z",
 	}
 
 	billingStart, _ := time.Parse(time.RFC3339, resp.StartOfMonth)
-	limit := resp.GPT4.MaxRequestUsage
+	limit := 0
+	if resp.GPT4.MaxRequestUsage != nil {
+		limit = *resp.GPT4.MaxRequestUsage
+	}
 	if limit == 0 {
 		limit = 500
 	}

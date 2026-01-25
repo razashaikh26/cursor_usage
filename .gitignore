@@ -1,0 +1,56 @@
+# Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+cursor-monitor
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# Config (user-specific)
+config.yaml
+
+# Logs
+*.log
+cursor-monitor.log
+
+# HAR files (may contain sensitive data)
+*.har
+
+# CSV files with user data
+usage-events-*.csv
+
+# PID files
+*.pid
+
+# Build artifacts
+bin/
+dist/

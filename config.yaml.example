@@ -18,3 +18,7 @@ logging:
   file: "~/.cursor_monitor/cursor-monitor.log"  # Log file path (empty = stdout only)
   level: "info"  # Log level: debug, info, warn, error
   max_size_mb: 10  # Max log file size in MB before rotation
+
+plan:
+  included_usage_usd: 63.60  # Your actual monthly bill (check Cursor settings for exact amount)
+  plan_name: "Pro+"  # Optional: "Pro", "Pro+", "Ultra" (for display purposes)

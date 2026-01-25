@@ -417,140 +417,215 @@ func (c *Client) tryGetInvoice(endpoint string, payload map[string]interface{}) 
 
 // getFilteredUsageEvents fetches usage events from the dedicated endpoint
 // This is the endpoint that actually returns detailed usage events!
+// Implements pagination to fetch all events, not just the first page
 func (c *Client) getFilteredUsageEvents(startDateMs, endDateMs int64) (*InvoiceData, error) {
 	endpoint := "/api/dashboard/get-filtered-usage-events"
-	
-	// Payload format from HAR: {"teamId":0,"startDate":"1766790000000","endDate":"1769345762244","page":1,"pageSize":100}
-	payload := map[string]interface{}{
-		"teamId":    0,
-		"startDate": fmt.Sprintf("%d", startDateMs),
-		"endDate":   fmt.Sprintf("%d", endDateMs),
-		"page":      1,
-		"pageSize":  100, // Can be increased if needed
-	}
-	
-	jsonData, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("marshaling request: %w", err)
-	}
-	
-	url := c.baseURL + endpoint
-	fmt.Printf("DEBUG: Fetching usage events from %s with payload: %s\n", url, string(jsonData))
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(jsonData))
-	if err != nil {
-		return nil, fmt.Errorf("creating request: %w", err)
-	}
-	
-	req.Header.Set("Cookie", fmt.Sprintf("WorkosCursorSessionToken=%s", c.sessionToken))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-	req.Header.Set("Origin", "https://cursor.com")
-	req.Header.Set("Referer", "https://cursor.com/dashboard")
-	
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("making request: %w", err)
-	}
-	defer resp.Body.Close()
-	
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
-	}
-	
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("reading response: %w", err)
-	}
-	
-	// Parse response - structure: {"totalUsageEventsCount":808,"usageEventsDisplay":[...]}
-	var rawResponse map[string]interface{}
-	if err := json.Unmarshal(body, &rawResponse); err != nil {
-		return nil, fmt.Errorf("parsing response: %w", err)
-	}
-	
-	// Extract usageEventsDisplay array
-	usageEventsDisplay, ok := rawResponse["usageEventsDisplay"].([]interface{})
-	if !ok {
-		fmt.Printf("DEBUG: No usageEventsDisplay array found in response\n")
-		return &InvoiceData{UsageEvents: []UsageEvent{}}, nil
-	}
-	
-	fmt.Printf("DEBUG: Found %d usage events in usageEventsDisplay\n", len(usageEventsDisplay))
-	
-	// Convert to UsageEvent structs
-	var events []UsageEvent
-	for _, eventRaw := range usageEventsDisplay {
-		eventMap, ok := eventRaw.(map[string]interface{})
-		if !ok {
-			continue
+	pageSize := 100
+	page := 1
+	var allEvents []UsageEvent
+	var totalCount int
+
+	// Loop through pages until all events are fetched
+	for {
+		payload := map[string]interface{}{
+			"teamId":    0,
+			"startDate": fmt.Sprintf("%d", startDateMs),
+			"endDate":   fmt.Sprintf("%d", endDateMs),
+			"page":      page,
+			"pageSize":  pageSize,
 		}
-		
-		// Parse timestamp (milliseconds)
-		timestampMs := getInt64(eventMap, "timestamp")
-		eventDate := time.Unix(timestampMs/1000, (timestampMs%1000)*1000000).UTC()
-		
-		// Parse kind - convert from API format to our format
-		kindStr := getString(eventMap, "kind")
-		kind := "Included"
-		if kindStr == "USAGE_EVENT_KIND_USAGE_BASED" {
-			kind = "On-Demand"
-		} else if kindStr == "USAGE_EVENT_KIND_ERRORED_NOT_CHARGED" {
-			kind = "Errored, No Charge"
+
+		jsonData, err := json.Marshal(payload)
+		if err != nil {
+			return nil, fmt.Errorf("marshaling request: %w", err)
 		}
-		
-		// Parse model
-		model := getString(eventMap, "model")
-		
-		// Parse token usage
-		tokenUsage, _ := eventMap["tokenUsage"].(map[string]interface{})
-		inputTokens := getInt(tokenUsage, "inputTokens")
-		outputTokens := getInt(tokenUsage, "outputTokens")
-		cacheWriteTokens := getInt(tokenUsage, "cacheWriteTokens")
-		cacheReadTokens := getInt(tokenUsage, "cacheReadTokens")
-		
-		// Calculate total tokens
-		totalTokens := inputTokens + outputTokens + cacheWriteTokens + cacheReadTokens
-		
-		// Parse cost - CRITICAL: For on-demand events, use usageBasedCosts, not tokenUsage.totalCents
-		// For included events, cost should be 0 (they're included in subscription)
-		var cost float64
-		if kind == "On-Demand" {
-			// For on-demand events, use usageBasedCosts field (e.g., "$0.43")
-			usageBasedCostsStr := getString(eventMap, "usageBasedCosts")
-			if usageBasedCostsStr != "" && usageBasedCostsStr != "-" {
-				// Parse "$0.43" format
-				costStr := strings.TrimPrefix(usageBasedCostsStr, "$")
-				if parsedCost, err := strconv.ParseFloat(costStr, 64); err == nil {
-					cost = parsedCost
+
+		url := c.baseURL + endpoint
+		if page == 1 {
+			fmt.Printf("DEBUG: Fetching usage events from %s (page %d)\n", url, page)
+		}
+		req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(jsonData))
+		if err != nil {
+			return nil, fmt.Errorf("creating request: %w", err)
+		}
+
+		req.Header.Set("Cookie", fmt.Sprintf("WorkosCursorSessionToken=%s", c.sessionToken))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+		req.Header.Set("Origin", "https://cursor.com")
+		req.Header.Set("Referer", "https://cursor.com/dashboard")
+
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("making request: %w", err)
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			body, _ := io.ReadAll(resp.Body)
+			return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, fmt.Errorf("reading response: %w", err)
+		}
+
+		// Parse response - structure: {"totalUsageEventsCount":808,"usageEventsDisplay":[...]}
+		var rawResponse map[string]interface{}
+		if err := json.Unmarshal(body, &rawResponse); err != nil {
+			return nil, fmt.Errorf("parsing response: %w", err)
+		}
+
+		// Get total count on first page
+		if page == 1 {
+			if totalCountRaw, ok := rawResponse["totalUsageEventsCount"]; ok {
+				switch v := totalCountRaw.(type) {
+				case int:
+					totalCount = v
+				case int64:
+					totalCount = int(v)
+				case float64:
+					totalCount = int(v)
 				}
+				fmt.Printf("DEBUG: Total usage events available: %d\n", totalCount)
 			}
-			// If usageBasedCosts is not available, fall back to tokenUsage.totalCents
-			if cost == 0 {
-				totalCents := getFloat64(tokenUsage, "totalCents")
-				cost = totalCents / 100.0
-			}
-		} else {
-			// For included events, cost is 0 (they're included in subscription)
-			cost = 0
 		}
-		
-		events = append(events, UsageEvent{
-			Date:                eventDate.Format(time.RFC3339),
-			Kind:                kind,
-			Model:               model,
-			MaxMode:             "", // Not in this response
-			InputWithCacheWrite: inputTokens + cacheWriteTokens, // Approximate
-			InputWithoutCacheWrite: 0, // Not directly available
-			CacheRead:           cacheReadTokens,
-			OutputTokens:        outputTokens,
-			TotalTokens:         totalTokens,
-			Cost:                cost,
-		})
+
+		// Extract usageEventsDisplay array
+		usageEventsDisplay, ok := rawResponse["usageEventsDisplay"].([]interface{})
+		if !ok {
+			if page == 1 {
+				fmt.Printf("DEBUG: No usageEventsDisplay array found in response\n")
+			}
+			break
+		}
+
+		pageEventCount := len(usageEventsDisplay)
+		if page == 1 {
+			fmt.Printf("DEBUG: Found %d usage events in page %d\n", pageEventCount, page)
+		}
+
+		// Convert to UsageEvent structs
+		for _, eventRaw := range usageEventsDisplay {
+			eventMap, ok := eventRaw.(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			// Parse timestamp (milliseconds)
+			timestampMs := getInt64(eventMap, "timestamp")
+			eventDate := time.Unix(timestampMs/1000, (timestampMs%1000)*1000000).UTC()
+
+			// Parse kind - convert from API format to our format
+			kindStr := getString(eventMap, "kind")
+			kind := "Included"
+			if kindStr == "USAGE_EVENT_KIND_USAGE_BASED" {
+				kind = "On-Demand"
+			} else if kindStr == "USAGE_EVENT_KIND_ERRORED_NOT_CHARGED" {
+				kind = "Errored, No Charge"
+			}
+
+			// Parse model
+			model := getString(eventMap, "model")
+
+			// Parse token usage
+			tokenUsage, _ := eventMap["tokenUsage"].(map[string]interface{})
+			inputTokens := getInt(tokenUsage, "inputTokens")
+			outputTokens := getInt(tokenUsage, "outputTokens")
+			cacheWriteTokens := getInt(tokenUsage, "cacheWriteTokens")
+			cacheReadTokens := getInt(tokenUsage, "cacheReadTokens")
+
+			// Calculate total tokens
+			totalTokens := inputTokens + outputTokens + cacheWriteTokens + cacheReadTokens
+
+			// Parse cost - Always get the actual cost value, even for included events
+			// The dashboard shows the actual price even if it's included in the plan
+			var cost float64
+			if kind == "On-Demand" {
+				// For on-demand events, use usageBasedCosts field (e.g., "$0.43")
+				usageBasedCostsStr := getString(eventMap, "usageBasedCosts")
+				if usageBasedCostsStr != "" && usageBasedCostsStr != "-" {
+					// Parse "$0.43" format
+					costStr := strings.TrimPrefix(usageBasedCostsStr, "$")
+					if parsedCost, err := strconv.ParseFloat(costStr, 64); err == nil {
+						cost = parsedCost
+					}
+				}
+				// If usageBasedCosts is not available, fall back to tokenUsage.totalCents
+				if cost == 0 {
+					totalCents := getFloat64(tokenUsage, "totalCents")
+					cost = totalCents / 100.0
+				}
+			} else {
+				// For included events, try multiple sources for cost
+				// The API should provide the actual cost value even for included events
+				// Based on dashboard: costs are typically $0.04-$0.47 for included events
+				
+				// 1. First try usageBasedCosts (this is the most reliable - already in dollars)
+				usageBasedCostsStr := getString(eventMap, "usageBasedCosts")
+				if usageBasedCostsStr != "" && usageBasedCostsStr != "-" {
+					costStr := strings.TrimPrefix(usageBasedCostsStr, "$")
+					if parsedCost, err := strconv.ParseFloat(costStr, 64); err == nil {
+						cost = parsedCost
+					}
+				}
+				
+				// 2. Try tokenUsage.totalCents
+				// Based on debug output: tokenUsage.totalCents=19.09 for dashboard cost of $0.19
+				// 19.09 / 100 = 0.1909 ≈ $0.19 ✓ CORRECT
+				// The field "totalCents" contains values in "hundredths of dollars" (19.09 = $0.1909)
+				// Always divide by 100 to convert to dollars
+				if cost == 0 && tokenUsage != nil {
+					totalCents := getFloat64(tokenUsage, "totalCents")
+					if totalCents > 0 {
+						// Convert from hundredths to dollars
+						cost = totalCents / 100.0
+					}
+				}
+				
+				// 3. Try direct cost field in eventMap (might be in dollars already)
+				if cost == 0 {
+					cost = getFloat64(eventMap, "cost", "Cost", "totalCost", "total_cost", "costUSD")
+				}
+				
+				// Debug output removed - calculation is working correctly
+				// tokenUsage.totalCents is in hundredths (19.09 = $0.19), divide by 100
+			}
+
+			allEvents = append(allEvents, UsageEvent{
+				Date:                eventDate.Format(time.RFC3339),
+				Kind:                kind,
+				Model:               model,
+				MaxMode:             "", // Not in this response
+				InputWithCacheWrite: inputTokens + cacheWriteTokens, // Approximate
+				InputWithoutCacheWrite: 0, // Not directly available
+				CacheRead:           cacheReadTokens,
+				OutputTokens:        outputTokens,
+				TotalTokens:         totalTokens,
+				Cost:                cost,
+			})
+		}
+
+		// Check if we've fetched all events
+		if pageEventCount < pageSize {
+			// Last page
+			break
+		}
+		if totalCount > 0 && len(allEvents) >= totalCount {
+			// We've fetched all events
+			break
+		}
+
+		// Move to next page
+		page++
 	}
-	
+
+	fmt.Printf("DEBUG: Fetched %d total usage events across %d pages\n", len(allEvents), page)
+
 	return &InvoiceData{
-		UsageEvents: events,
+		UsageEvents: allEvents,
 		Items:       []InvoiceItem{},
 	}, nil
 }

@@ -220,6 +220,60 @@ func (m *Monitor) poll(ctx context.Context) error {
 	usageData.IsOnDemand = invoiceData.IsOnDemand
 	usageData.OnDemandSpendCents = runningOnDemandCents
 
+	// billingCycleStr already declared above, so we'll use it when saving events
+	// For now, handle the case where API shows 0 but we have events
+	if usageData.IsOnDemand && usageData.PremiumRequestsUsed == 0 {
+		// Try to get usage events from storage if not in invoiceData
+		var usageEvents []api.UsageEvent
+		if len(invoiceData.UsageEvents) > 0 {
+			usageEvents = invoiceData.UsageEvents
+		} else {
+			// Try to get from storage
+			storedEvents, err := m.storage.GetUsageEventsForCycle(billingCycleStr)
+			if err == nil {
+				// Convert storage events to API events for counting
+				for _, se := range storedEvents {
+					usageEvents = append(usageEvents, api.UsageEvent{
+						Kind: se.Kind,
+					})
+				}
+			}
+		}
+		
+		// Count included events to determine actual usage
+		includedCount := 0
+		for _, event := range usageEvents {
+			if event.Kind == "Included" {
+				includedCount++
+			}
+		}
+		
+		// If we have included events, use that as the actual usage
+		if includedCount > 0 {
+			usageData.PremiumRequestsUsed = includedCount
+			// Recalculate percentage
+			if usageData.PremiumRequestsLimit > 0 {
+				usageData.UsagePercentage = float64(includedCount) / float64(usageData.PremiumRequestsLimit) * 100
+			} else {
+				usageData.UsagePercentage = 100.0 // At least 100% if we're on-demand
+			}
+			m.logger.Printf("Calculated usage from events: %d included requests (%.1f%%)", includedCount, usageData.UsagePercentage)
+		} else {
+			// No included events found, but we're on-demand - must have exceeded limit
+			// Set to at least 100% to reflect that we've used all included credits
+			usageData.UsagePercentage = 100.0
+			// Estimate usage as limit (we've at least used all included credits)
+			usageData.PremiumRequestsUsed = usageData.PremiumRequestsLimit
+			m.logger.Printf("On-demand with no included events - setting usage to 100%% (limit: %d)", usageData.PremiumRequestsLimit)
+		}
+	} else if usageData.IsOnDemand && usageData.PremiumRequestsUsed < usageData.PremiumRequestsLimit {
+		// On-demand but usage shows less than limit - this is inconsistent
+		// Set to at least 100% since we've exceeded the limit
+		usageData.UsagePercentage = 100.0
+		usageData.PremiumRequestsUsed = usageData.PremiumRequestsLimit
+		m.logger.Printf("On-demand with inconsistent usage (%d < %d) - setting to 100%%", usageData.PremiumRequestsUsed, usageData.PremiumRequestsLimit)
+	}
+
 	// Create snapshot
 	snapshot := &storage.UsageSnapshot{
 		Timestamp:            time.Now(),
@@ -330,6 +384,25 @@ func (m *Monitor) poll(ctx context.Context) error {
 				m.logger.Printf("Warning: Could not save usage events: %v", err)
 			} else {
 				m.logger.Printf("Saved %d usage events for billing cycle %s", len(events), billingCycleStr)
+				
+				// Recalculate usage from events (more accurate than API)
+				stats, err := m.storage.CalculateUsageStats(billingCycleStr)
+				if err == nil {
+					// Update usage data with accurate counts from events
+					usageData.PremiumRequestsUsed = stats.IncludedRequests
+					if usageData.PremiumRequestsLimit > 0 {
+						usageData.UsagePercentage = float64(stats.IncludedRequests) / float64(usageData.PremiumRequestsLimit) * 100
+					}
+					
+					// If we're on-demand, we've used at least the included amount
+					if usageData.IsOnDemand && m.config.Plan.IncludedUsageUSD > 0 {
+						// Calculate percentage based on dollar usage
+						// If on-demand, we've used at least the included amount
+						usageData.UsagePercentage = 100.0
+						m.logger.Printf("Recalculated from events: %d included requests, %.1f%% usage", 
+							stats.IncludedRequests, usageData.UsagePercentage)
+					}
+				}
 			}
 		}
 	}

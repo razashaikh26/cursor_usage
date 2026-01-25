@@ -336,12 +336,17 @@ func (s *Storage) SaveUsageEvents(billingCycle string, events []UsageEvent) erro
 		}
 	}()
 
-	// Insert events (using INSERT OR IGNORE to handle duplicates)
-	stmt, err := tx.Prepare(`INSERT OR IGNORE INTO usage_events 
+	// Insert or update events (UPSERT) - update cost if event already exists
+	// This ensures we get the latest cost values even for existing events
+	stmt, err := tx.Prepare(`INSERT INTO usage_events 
 		(event_date, billing_cycle, kind, model, max_mode, 
 		 input_with_cache_write, input_without_cache_write, cache_read,
 		 output_tokens, total_tokens, cost, fetched_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(event_date, model, kind, total_tokens) 
+		DO UPDATE SET 
+			cost = excluded.cost,
+			fetched_at = excluded.fetched_at`)
 	if err != nil {
 		return fmt.Errorf("preparing insert statement: %w", err)
 	}

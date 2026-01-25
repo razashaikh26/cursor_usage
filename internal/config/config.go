@@ -18,6 +18,7 @@ type Config struct {
 	Database DatabaseConfig `yaml:"database"`
 	BYOK     BYOKConfig     `yaml:"byok"`
 	Logging  LoggingConfig  `yaml:"logging"`
+	Plan     PlanConfig     `yaml:"plan"`
 }
 
 // PollingConfig holds polling interval settings
@@ -51,6 +52,12 @@ type BYOKConfig struct {
 	ShowComparison bool `yaml:"show_comparison"`
 }
 
+// PlanConfig holds plan information for accurate usage calculations
+type PlanConfig struct {
+	IncludedUsageUSD float64 `yaml:"included_usage_usd"` // e.g., 70.0 for Pro+, 20.0 for Pro, 400.0 for Ultra
+	PlanName         string  `yaml:"plan_name"`          // "Pro", "Pro+", "Ultra" (optional, for display)
+}
+
 // DefaultConfig returns a configuration with default values
 func DefaultConfig() *Config {
 	return &Config{
@@ -74,6 +81,10 @@ func DefaultConfig() *Config {
 			File:      "~/.cursor_monitor/cursor-monitor.log",
 			Level:     "info",
 			MaxSizeMB: 10,
+		},
+		Plan: PlanConfig{
+			IncludedUsageUSD: 63.60, // Default to Pro+ ($63.60 including tax)
+			PlanName:         "Pro+",
 		},
 	}
 }

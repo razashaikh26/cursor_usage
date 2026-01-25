@@ -1,0 +1,5 @@
+usage_date_utc,model,workspace,api_key,usage_type,context_window,token_type,cost_usd,cost_type
+2026-01-25,Claude Opus 4.5,Default,Cursor,message,≤ 200k,input_no_cache,0.00,token
+2026-01-25,Claude Opus 4.5,Default,Cursor,message,≤ 200k,input_cache_read,1.04,token
+2026-01-25,Claude Opus 4.5,Default,Cursor,message,≤ 200k,input_cache_write_5m,0.91,token
+2026-01-25,Claude Opus 4.5,Default,Cursor,message,≤ 200k,output,0.44,token

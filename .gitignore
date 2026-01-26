@@ -47,6 +47,7 @@ cursor-monitor.log
 
 # CSV files with user data
 usage-events-*.csv
+claude_api_cost_*.csv
 
 # PID files
 *.pid

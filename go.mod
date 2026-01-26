@@ -3,7 +3,7 @@ module cursor-monitor
 go 1.22
 
 require (
-	github.com/golang-jwt/jwt/v5 v5.2.0
+	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/spf13/cobra v1.8.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.29.0

